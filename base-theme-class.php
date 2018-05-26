@@ -98,6 +98,7 @@ class BaseThemeClass {
          ->set_up_custom_types()
          ->set_up_custom_parameters()
          ->remove_comments_admin()
+         ->tidy_up_image_sizes()
          ->set_up_email_short_code();
   }
   function initialize_templates_directory() {
@@ -123,6 +124,25 @@ class BaseThemeClass {
         wp_enqueue_script( $key, $this->template_directory_uri.$name,array(),null,true);
       }
     }
+  }
+
+//----------------------------------------------------------------------
+// Stop wordpress generating multiple image copies...
+// We just leave the thumbnails needed for the media manager!
+//----------------------------------------------------------------------
+
+  public function tidy_up_image_sizes() {
+    add_filter( 'intermediate_image_sizes_advanced', array( $this, 'remove_default_images' ), PHP_INT_MAX  );
+    return $this;
+  }
+
+  function remove_default_images( $sizes ) {
+    //error_log( print_r( $sizes, 1 ) );
+    unset( $sizes['small']);        // 150px
+    unset( $sizes['medium']);       // 300px
+    unset( $sizes['large']);        // 1024px
+    unset( $sizes['medium_large']); // 768px
+    return $sizes;
   }
 
 //----------------------------------------------------------------------
