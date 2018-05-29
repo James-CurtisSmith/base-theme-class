@@ -54,10 +54,10 @@
 const DEFAULT_DEFN = [
   'PARAMETERS'   => [   // Associate array of definitions...
     // Key is variable "name"
-    // type    - is type of input 
+    // type    - is type of input
     // section - is which part of menu to add this to [may need to add "add-section" code
     // default - default value
-    // description - help text appears under 
+    // description - help text appears under
   ],
   'DEFAULT_TYPE' => 'page', // We need to know what type to default to as removing posts!
   'STYLE'        => [],     // Associate array of CSS files (key/filename)
@@ -141,7 +141,7 @@ class BaseThemeClass {
 //----------------------------------------------------------------------
 // Just minor theme support functionality
 //----------------------------------------------------------------------
- 
+
   function initialize_theme() {
     add_action( 'after_setup_theme',          array( $this, 'theme_setup'      ) );
     return $this;
@@ -198,7 +198,7 @@ class BaseThemeClass {
         unset( $attr[$key] );
       }
     }
-    return $attr; 
+    return $attr;
   }
   function remove_width_attribute( $html ) {
     return preg_replace( '/(width|height)="\d*"\s/',          "", $html );
@@ -210,7 +210,7 @@ class BaseThemeClass {
 //----------------------------------------------------------------------
 // Set up custom types from configuration hash {TYPES}
 //----------------------------------------------------------------------
- 
+
   function hr( $string ) {
     return ucfirst( preg_replace( '/_/', ' ', $string ) );
   }
@@ -241,9 +241,9 @@ class BaseThemeClass {
     // we will generate a custome type...
     $type = $this->cr( $name );
 
-    if( $type !== 'page' & $type !== 'post' && !isset( $extra['not_custom'] ) ) { 
+    if( $type !== 'page' & $type !== 'post' && !isset( $extra['not_custom'] ) ) {
       $this->create_custom_type( array_merge( [ 'name' => $name ] , $extra ) );
-    } 
+    }
     // We do some magic now to the name to get the type...
     // Set the location - unless over-ridden in extra...
     $location = [ 'param' => 'post_type', 'operator' => '==', 'value' => $type ];
@@ -259,16 +259,29 @@ class BaseThemeClass {
       'menu_order' => 0,
       'label_placement' => 'left'
     ];
-    // and add fields to it... note we don't have complex fields here!!!
-    foreach( $fields as $field => $def ) {
-      $code = $this->cr( $field );
-      $defn['fields'][] = array_merge(
-        ['key'=>'field_'.$code, 'label' => $field, 'name' => $code ],
-        $def);
-    }
+    $defn['fields'] = $this->munge_fields( $fields );
     // Finally register the acf group to generate the admin interface!
     register_field_group( $defn );
     return $this;
+  }
+
+  function munge_fields( $fields ) {
+    // and add fields to it... note we don't have complex fields here!!!
+    $munged = [];
+    foreach( $fields as $field => $def ) {
+      $code = $this->cr( $field );
+      $me = array_merge(
+        ['key'=>'field_'.$code, 'label' => $field, 'name' => $code ],
+        $def);
+      if( isset( $def['sub_fields'] ) ){
+        $me['sub_fields'] = $this->munge_fields( $def['sub_fields'] );
+      }
+      if( isset( $def['layouts'] ) ){
+        $me['layouts'] = $this->munge_fields( $def['layouts'] );
+      }
+      $munged[]=$me;
+    }
+    return $munged;
   }
 
   function create_custom_type( $def ) {
@@ -284,7 +297,7 @@ class BaseThemeClass {
     $all_items  = __('All '.strtolower($plural) );
     register_post_type( $code, [
       'public'       => true,
-      'has_archive'  => true, 
+      'has_archive'  => true,
       'menu_icon'    => 'dashicons-'.$icon,
       'heirarchical' => isset( $def['hierarchical'] ) ? $def['hierarchical'] : false,
       'labels'       => [
@@ -306,7 +319,7 @@ class BaseThemeClass {
 //----------------------------------------------------------------------
 // Set up custom paraemters (in customizer) from config hash (PARAMETERS)
 //----------------------------------------------------------------------
- 
+
   function register_custom_parameters() {
     add_action( 'customize_register',         array( $this, 'create_custom_theme_params' ) );
     return $this;
@@ -362,7 +375,7 @@ class BaseThemeClass {
   //   and change the default "New" link to "page"...
   function change_default_new_link( $wp_admin_bar, $type = '', $title = '' ) {
     if( $type === '' ) {
-      $type = array_key_exists( 'DEFAULT_TYPE', $this->defn ) 
+      $type = array_key_exists( 'DEFAULT_TYPE', $this->defn )
             ? $this->defn[  'DEFAULT_TYPE' ]
             : DEFAULT_DEFN[ 'DEFAULT_TYPE' ]
             ;
@@ -372,7 +385,7 @@ class BaseThemeClass {
     }
     // We can't have the node directly (shame) so we have to copy the node...
     $new_content_node = $wp_admin_bar->get_node('new-content');
-    // Change the link... and set the 
+    // Change the link... and set the
     $new_content_node->href .= '?post_type='.$type;
     // Change the title (to include default add action!)
     $new_content_node->title = preg_replace(
@@ -381,7 +394,7 @@ class BaseThemeClass {
     $wp_admin_bar->add_node( $new_content_node);
     $wp_admin_bar->remove_menu('comments');
     $wp_admin_bar->remove_node('new-post');
-    $wp_admin_bar->remove_menu('wp-logo');   // Not to do with psts 
+    $wp_admin_bar->remove_menu('wp-logo');   // Not to do with psts
   }
 
   function remove_posts_sidebar() {
@@ -415,12 +428,12 @@ class BaseThemeClass {
 
   // Short code: [email_link {email} {link text}?]
   //
-  // Render an (source code) obfuscated email (mailto:) link 
+  // Render an (source code) obfuscated email (mailto:) link
   //
   //  * If email does not contain "@" then we add email_domain from customizer...
   //  * If link text isn't defined it defaults to email address
   //
- 
+
   function email_link( $atts, $content = null ) {
     $email = array_shift( $atts );
     $email = strpos( $email, '@' ) !== false
@@ -436,12 +449,12 @@ class BaseThemeClass {
       $this->random_url_encode( $email ),
       $this->random_html_entities( $name )
     );
-  } 
-  
+  }
+
 //----------------------------------------------------------------------
 // Some additional functions!
 //----------------------------------------------------------------------
-  
+
   public function theme_version() {
     return wp_get_theme()->get( 'Version' );
   }
@@ -488,6 +501,9 @@ class BaseThemeClass {
          switch( $s ) {
            case 'body_class' :
              return join( ' ', get_body_class() );
+           case 'menu-' === substr( $s, 0, 5) :
+             return preg_replace( '/\n/', "\n    ",
+                wp_nav_menu( ['menu' => substr( $s, 5 ), 'container' => 'nav', 'fallback_cb' => false, 'echo' => false ] ));
            case 'head' :
              ob_start();
              wp_head();
@@ -504,7 +520,7 @@ class BaseThemeClass {
 
     return $this;
   }
-  
+
   function add_array_method( $key, $fn ) {
     $this->array_methods[  $key ] = $fn;
     return $this;
@@ -526,7 +542,7 @@ class BaseThemeClass {
       #  $this->templates[$key][] = $template['template'];
         if( array_key_exists( 'post', $template ) ) {
           $this->add_postprocessor( $key, $template['post'] );
-        } 
+        }
         return $this;
       }
       foreach( $template as $t ) {
@@ -548,7 +564,7 @@ class BaseThemeClass {
     }
     return $this;
   }
-  
+
   public function load_from_directory( $dirname = '__templates' ) {
     $full_path = $this->template_directory.'/'.$dirname;
     if( file_exists( $full_path ) ) {
@@ -570,7 +586,7 @@ class BaseThemeClass {
     }
     return $this;
   }
-  
+
   public function dump_templates( ) {
     print '<pre style="height:800px;overflow:scrollbar">';
     print '<h4>Templates</h4>';
@@ -625,7 +641,7 @@ class BaseThemeClass {
       $function = $this->preprocessors[$template_code];
       $data = $function( $data, $this );
     }
-    $regexp = sprintf( '/\[\[(?:(%s|%s):)?([-~.\w+]+)(?::([^\]]+))?\]\]/', 
+    $regexp = sprintf( '/\[\[(?:(%s|%s):)?([-~.\w+]+)(?::([^\]]+))?\]\]/',
        implode('|',array_keys( $this->array_methods )),
        implode('|',array_keys( $this->scalar_methods )) );
     $out = implode( '', array_map(
@@ -669,7 +685,7 @@ class BaseThemeClass {
     //     "-" - data is just the raw value of extra
     //     "~" - data is the theme parameter {from customizer} give by extra
     //     "." - data is just the data for the current template
-    // otherwise 
+    // otherwise
     //   split the variable on "." and use these as keys for the elements of data to
     //   sub-value or sub-tree of data...
     //
@@ -688,7 +704,7 @@ class BaseThemeClass {
             return ''; // No value in tree with that key!
           }
           // key doesn't exist in data structure or has null value...
-          if( !array_key_exists( $key, $t_data ) || 
+          if( !array_key_exists( $key, $t_data ) ||
             !isset(            $t_data[$key] ) ||
             is_null(           $t_data[$key] ) ) {
             return '';
@@ -698,7 +714,7 @@ class BaseThemeClass {
         return $t_data;
     }
   }
-    
+
   function render_scalar( $scalar, $style = 'default' ) {
   }
 
@@ -715,7 +731,7 @@ class BaseThemeClass {
       preg_replace('/<img\s[^>]*src=""[^>]*>/','',              // Empty images
         $this->expand_template( $template_code, $data ) ) ) ) );
   }
-  
+
   function output( $template_code, $data = [] ) {
     print $this->render( $template_code, $data );
     return $this;
