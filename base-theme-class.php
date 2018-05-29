@@ -58,20 +58,8 @@ const DEFAULT_DEFN = [
     // section - is which part of menu to add this to [may need to add "add-section" code
     // default - default value
     // description - help text appears under 
-    'email_domain' => [
-      'type'        => 'text',
-      'section'     => 'title_tagline',
-      'default'     => 'mydomainname.org.uk',
-      'description' => 'Specify the domain for email addresses.'
-    ]
   ],
-  'DEFAULT_TYPE' => 'page',
-  'TYPES'        => [],     // Associate array of types
-     // Values are an array
-     // [ code, dashicons code, name (singluar)?, name (plural)? ]
-     // For dashicons code see: https://developer.wordpress.org/resource/dashicons/
-     // name (singular/plural) if null/omitted are guessed from code
-     //                             ucfirst / add "s"
+  'DEFAULT_TYPE' => 'page', // We need to know what type to default to as removing posts!
   'STYLE'        => [],     // Associate array of CSS files (key/filename)
   'SCRIPTS'      => []      // Associate array of JS files  (key/filename)
 ];
@@ -86,20 +74,25 @@ class BaseThemeClass {
   protected $debug;
   protected $array_methods;
   protected $scalar_methods;
-  
   public function __construct( $defn ) {
     $this->defn = $defn;
     $this->initialize_templates()
          ->initialize_templates_directory()
-         ->add_my_scripts_and_stylesheets()
-         ->set_up_theme()
+         ->initialize_theme()
+         // The following four lines are just to tidy up some of the
+         // quirks of wordpress when using it to make a website
+         // rather than a blog!
          ->clean_up_the_rubbish_wordpress_adds()
          ->stop_wordpress_screwing_up_image_widths_with_captions()
-         ->set_up_custom_types()
-         ->set_up_custom_parameters()
-         ->remove_comments_admin()
          ->tidy_up_image_sizes()
-         ->set_up_email_short_code();
+         ->remove_comments_admin()
+         // Now we just set up stuff that we need to have set up for
+         // this site - some of these are part of the base theme -
+         // others are added by the theme
+         ->add_my_scripts_and_stylesheets()
+         ->register_custom_parameters()
+         ->register_short_codes()
+         ;
   }
   function initialize_templates_directory() {
     $this->template_directory     = get_template_directory();
@@ -113,12 +106,13 @@ class BaseThemeClass {
   }
 
   public function enqueue_scripts() {
-    //wp_scripts()->add_data( 'jquery', 'group', 1 );
+    // Push styles into header...
     if( isset( $this->defn[ 'STYLES' ] ) ) {
       foreach( $this->defn[ 'STYLES' ] as $key => $name ) {
         wp_enqueue_script( $key, $this->template_directory_uri.$name,array(),null,false);
       }
     }
+    // Push scripts into footer...
     if( isset( $this->defn[ 'SCRIPTS' ] ) ) {
       foreach( $this->defn[ 'SCRIPTS' ] as $key => $name ) {
         wp_enqueue_script( $key, $this->template_directory_uri.$name,array(),null,true);
@@ -137,7 +131,6 @@ class BaseThemeClass {
   }
 
   function remove_default_images( $sizes ) {
-    //error_log( print_r( $sizes, 1 ) );
     unset( $sizes['small']);        // 150px
     unset( $sizes['medium']);       // 300px
     unset( $sizes['large']);        // 1024px
@@ -149,13 +142,13 @@ class BaseThemeClass {
 // Just minor theme support functionality
 //----------------------------------------------------------------------
  
-  function set_up_theme() {
+  function initialize_theme() {
     add_action( 'after_setup_theme',          array( $this, 'theme_setup'      ) );
     return $this;
   }
 
   public function theme_setup() {
-    add_theme_support( 'html5' );
+    add_theme_support( 'html5' );        // Make it HTML 5 compliant
     add_theme_support( 'title-tag' );
   }
 
@@ -186,23 +179,20 @@ class BaseThemeClass {
   }
 
   public function stop_wordpress_screwing_up_image_widths_with_captions() {
-    add_filter( 'post_thumbnail_html',  'remove_width_attribute', PHP_INT_MAX );
-    add_filter( 'image_send_to_editor', 'remove_width_attribute', PHP_INT_MAX );
-    add_filter( 'get_image_tag',        'remove_width_attribute', PHP_INT_MAX );
-
-    add_filter(    'image_widget_image_attributes',  array( $this, 'responsive_image_widget' ) );
-
-    add_filter(    'wp_calculate_image_sizes',      '__return_empty_array',  PHP_INT_MAX );
-    add_filter(    'wp_calculate_image_srcset',     '__return_empty_array', PHP_INT_MAX );
-    add_filter(    'img_caption_shortcode_width',   '__return_false', PHP_INT_MAX );
-    remove_filter( 'the_content',                   'wp_make_content_images_responsive' );
+    add_filter(    'post_thumbnail_html',            array( $this, 'remove_width_attribute'  ), PHP_INT_MAX );
+    add_filter(    'image_send_to_editor',           array( $this, 'remove_width_attribute'  ), PHP_INT_MAX );
+    add_filter(    'get_image_tag',                  array( $this, 'remove_width_attribute'  ), PHP_INT_MAX );
+    add_filter(    'image_widget_image_attributes',  array( $this, 'responsive_image_widget' ), PHP_INT_MAX );
+    add_filter(    'wp_calculate_image_sizes',       '__return_empty_array',                    PHP_INT_MAX );
+    add_filter(    'wp_calculate_image_srcset',      '__return_empty_array',                    PHP_INT_MAX );
+    add_filter(    'img_caption_shortcode_width',    '__return_false',                          PHP_INT_MAX );
     add_filter(    'wp_get_attachment_image_attributes',
-      array( $this,  'remove_image_image_attributes_related_to_size' ),
-      PHP_INT_MAX );
+                        array( $this,  'remove_image_attributes_related_to_size' ),             PHP_INT_MAX );
+    remove_filter( 'the_content',                    'wp_make_content_images_responsive' );
     return $this;
   }
 
-  function remove_image_image_attributes_related_to_size( $attr )  {
+  function remove_image_attributes_related_to_size( $attr )  {
     foreach( array('sizes','srcset','width','height') as $key) {
       if( isset( $attr[$key] ) ) {
         unset( $attr[$key] );
@@ -211,73 +201,141 @@ class BaseThemeClass {
     return $attr; 
   }
   function remove_width_attribute( $html ) {
-    $html = preg_replace( '/(width|height)="\d*"\s/', "", $html );
-    return $html;
+    return preg_replace( '/(width|height)="\d*"\s/',          "", $html );
   }
   function responsive_image_widget($html) {
-    return preg_replace('/(width|height)=["\']\d*["\']\s?/', "", $html);
+    return preg_replace( '/(width|height)=["\']\d*["\']\s?/', "", $html );
   }
 
 //----------------------------------------------------------------------
 // Set up custom types from configuration hash {TYPES}
 //----------------------------------------------------------------------
  
-  function set_up_custom_types() {
-    add_action( 'init',                       array( $this, 'create_custom_types'        ) );
+  function hr( $string ) {
+    return ucfirst( preg_replace( '/_/', ' ', $string ) );
+  }
+  function cr( $string ) {
+    return strtolower( preg_replace( '/\s+/', '_', $string ) );
+  }
+  function pl( $string ) {
+    if( preg_match( '/y$/', $string ) ) {
+      return preg_replace( '/y$/', 'ies', $string );
+    }
+    return $string.'s';
+  }
+  function create_custom_types() {
+// Name, icon='', plural='', code=''
+    if( isset( $this->defn[ 'TYPES' ] ) ) {
+      foreach( $this->defn[ 'TYPES' ] as $def ) {
+        $this->create_custom_type( $def );
+      }
+    }
     return $this;
   }
 
-  function create_custom_types() {
-    if( isset( $this->defn[ 'TYPES' ] ) ) {
-      foreach( $this->defn[ 'TYPES' ] as $def ) {
-        $name   = isset( $def[2] ) ? $def[2] : ucfirst( $def[0] );
-        $lc     = strtolower($name);
-        $plural = isset( $def[3] ) ? $def[3] : $name.'s';
-        $new_item  = __("New $lc");
-        $edit_item = __("Edit $lc");
-        $view_item = __("View $lc");
-        $view_items = __('View '.strtolower($plural) );
-        $all_items  = __('All '.strtolower($plural) );
-        register_post_type( $def[0], [ 'public' => true, 'has_archive' => true, 'menu_icon' => 'dashicons-'.$def[1],
-          'labels' => [
-            'add_new'          => $new_item,
-            'add_new_singular' => $new_item,
-            'new_item'         => $new_item,
-            'edit_item'        => $edit_item,
-            'view_item'        => $view_item,
-            'view_items'       => $view_items,
-            'all_items'        => $all_items,
-            'singular_name' => __($name), 'name' => __($plural) ] ] );
-      }
+  function define_type( $name, $fields, $extra=[] ) {
+    if(! function_exists("register_field_group") ) {
+      return  $this->show_error( 'ACF plugin not installed!' );
     }
+    // type is page or post or "not_custom" isn't set in extra
+    // we will generate a custome type...
+    $type = $this->cr( $name );
+
+    if( $type !== 'page' & $type !== 'post' && !isset( $extra['not_custom'] ) ) { 
+      $this->create_custom_type( array_merge( [ 'name' => $name ] , $extra ) );
+    } 
+    // We do some magic now to the name to get the type...
+    // Set the location - unless over-ridden in extra...
+    $location = [ 'param' => 'post_type', 'operator' => '==', 'value' => $type ];
+    if( isset( $extra['location'] ) ) {
+      $t = $extra['location'];
+      $location = [ 'param' => $t[0], 'operator' => $t[1], 'value' => $t[2] ];
+    }
+    // Create the basic definition
+    $defn = [ 'id' => 'acf_'.$type, 'title' => $name,
+      'fields' => [],
+      'location' => [[$location]],
+      'options' => [ 'position' => 'normal', 'layout' => 'no_box', 'hide_on_screen' => [ 0 => 'the_content' ] ],
+      'menu_order' => 0,
+      'label_placement' => 'left'
+    ];
+    // and add fields to it... note we don't have complex fields here!!!
+    foreach( $fields as $field => $def ) {
+      $code = $this->cr( $field );
+      $defn['fields'][] = array_merge(
+        ['key'=>'field_'.$code, 'label' => $field, 'name' => $code ],
+        $def);
+    }
+    // Finally register the acf group to generate the admin interface!
+    register_field_group( $defn );
+    return $this;
+  }
+
+  function create_custom_type( $def ) {
+    $name   = $def['name'];
+    $icon   = isset( $def['icon']   ) ? $def['icon']   : 'admin-page';
+    $plural = isset( $def['plural'] ) ? $def['plural'] : $this->pl( $name );
+    $code   = isset( $def['code']   ) ? $def['code']   : $this->cr( $name );
+    $lc     = strtolower($name);
+    $new_item  = __("New $lc");
+    $edit_item = __("Edit $lc");
+    $view_item = __("View $lc");
+    $view_items = __('View '.strtolower($plural) );
+    $all_items  = __('All '.strtolower($plural) );
+    register_post_type( $code, [
+      'public'       => true,
+      'has_archive'  => true, 
+      'menu_icon'    => 'dashicons-'.$icon,
+      'heirarchical' => isset( $def['hierarchical'] ) ? $def['hierarchical'] : false,
+      'labels'       => [
+        'add_new'          => $new_item,
+        'add_new_singular' => $new_item,
+        'new_item'         => $new_item,
+        'add_new_item'     => "Add new $lc",
+        'edit_item'        => $edit_item,
+        'view_item'        => $view_item,
+        'view_items'       => $view_items,
+        'all_items'        => $all_items,
+        'singular_name'    => __($name),
+        'name'             => __($plural)
+      ]
+    ] );
+    return $this;
   }
 
 //----------------------------------------------------------------------
 // Set up custom paraemters (in customizer) from config hash (PARAMETERS)
 //----------------------------------------------------------------------
  
-  function set_up_custom_parameters() {
+  function register_custom_parameters() {
     add_action( 'customize_register',         array( $this, 'create_custom_theme_params' ) );
     return $this;
   }
 
   function create_custom_theme_params( $wp_customize ) {
+    $params = [ 'email_domain' => [
+      'type'        => 'text',
+      'section'     => 'title_tagline',
+      'default'     => 'mydomainname.org.uk',
+      'description' => 'Specify the domain for email addresses.'
+    ] ];
     if( isset( $this->defn[ 'PARAMETERS' ] ) ) {
-      foreach( $this->defn[ 'PARAMETERS' ] as $par => $def ) {
-        $name = isset( $def['name'] ) ? $def['name'] : $this->hr( $par );
-        $type = isset( $def['type'] ) ? $def['type'] : 'text';
-        $sanitize = 'sanitize_text_field';
-        $wp_customize->add_setting( $par, array(
-          'default'           => isset( $def['default'] ) ? $def['default'] : '',
-          'sanitize_callback' => $sanitize
-        ) );
-        $wp_customize->add_control( $par, array(
-          'type'        => $type,
-          'section'     => $def['section'],
-          'label'       => __( $name ),
-          'description' => __( isset( $def['description'] ) ? $def['description'] : '' )
-        ));
-      }
+      $params = array_merge( $params, $this->defn[ 'PARAMETERS' ] );
+    }
+    foreach( $params as $par => $def ) {
+      $name = isset( $def['name'] ) ? $def['name'] : $this->hr( $par );
+      $type = isset( $def['type'] ) ? $def['type'] : 'text';
+      $sanitize = 'sanitize_text_field';
+      $wp_customize->add_setting( $par, array(
+        'default'           => isset( $def['default'] ) ? $def['default'] : '',
+        'sanitize_callback' => $sanitize
+      ) );
+      $wp_customize->add_control( $par, array(
+        'type'        => $type,
+        'section'     => $def['section'],
+        'label'       => __( $name ),
+        'description' => __( isset( $def['description'] ) ? $def['description'] : '' )
+      ));
     }
   }
 
@@ -350,7 +408,7 @@ class BaseThemeClass {
 // Add email link short code functionality to obfuscate emails...
 //----------------------------------------------------------------------
 
-  public function set_up_email_short_code() {
+  public function register_short_codes() {
     add_shortcode( 'email_link', array( $this, 'email_link' ) );
     return $this;
   }
@@ -420,7 +478,28 @@ class BaseThemeClass {
       'shortcode' => 'do_shortcode',
       'strip'     => function( $s ) { return preg_replace( '/\s*\b(height|width)=["\']\d+["\']/', '', do_shortcode( $s ) ); },
       'rand_html' => function( $s ) { return $this->random_html_entities( $s ); },
-      'html'      => 'HTMLentities'
+      'html'      => 'HTMLentities',
+      'email'     => function( $s ) { // embeds an email link into the page!
+        $s = strpos( $s, '@' ) !== false ? $s : $s.'@'.get_theme_mod('email_domain');
+        return sprintf( '<a href="mailto:%s">%s</a>', $this->random_url_encode( $s ),
+          $this->random_html_entities( $s ) );
+      },
+      'wp'        => function( $s ) { // Used to call one of the standard wordpress template blocks
+         switch( $s ) {
+           case 'body_class' :
+             return join( ' ', get_body_class() );
+           case 'head' :
+             ob_start();
+             wp_head();
+             return preg_replace( '/\n/', "\n    ", trim(ob_get_clean()));
+           case 'foot' :
+             ob_start();
+             wp_footer();
+             return preg_replace( '/\n/', "\n    ", trim(ob_get_clean()));
+           default:
+             return sprintf('<p>unknown part %s</p>', HTMLentities($s));
+        }
+      }
     ];
 
     return $this;
@@ -470,7 +549,7 @@ class BaseThemeClass {
     return $this;
   }
   
-  public function load_from_directory( $dirname ) {
+  public function load_from_directory( $dirname = '__templates' ) {
     $full_path = $this->template_directory.'/'.$dirname;
     if( file_exists( $full_path ) ) {
       if( is_dir( $full_path ) ) {
@@ -644,9 +723,12 @@ class BaseThemeClass {
 
   function output_page( $page_type ) {
     get_header();
-    $this->output( $page_type,
-      array_merge(get_fields(),['url'=>get_permalink(),'title'=>the_title('','',false)])
-    );
+    $extra = ['url'=>get_permalink(),'title'=>the_title('','',false)];
+    if( is_array( get_fields() ) ) {
+      $this->output( $page_type, array_merge(get_fields(),$extra) );
+    } else {
+      $this->output( $page_type, $extra );
+    }
     get_footer();
   }
 
@@ -654,8 +736,19 @@ class BaseThemeClass {
 // Support functions used by other methods!
 //----------------------------------------------------------------------
 
-  function hr( $s ) {
-    return ucfirst( str_replace( '_', ' ', $s ) );
+  function hide_acf_admin() {
+    define( 'ACF_LITE', true );
+    return $this;
+  }
+
+  function get_entries( $type ) {
+    $entries = get_posts( ['numberposts'=>-1,'post_type'=>$type] );
+    $return = [];
+    foreach( $entries as $post ) {
+      $meta = get_fields( $post->ID );
+      $return[] = array_merge( $meta, [ 'title' => $post->post_title, 'ID' => $post->ID, 'name' => $post->post_name ] );
+    }
+    return $return;
   }
 
   function random_html_entities( $string ) {
@@ -670,6 +763,7 @@ class BaseThemeClass {
     }
     return $res;
   }
+
   function random_url_encode( $string ) {
     $alwaysEncode = array('.', ':', '@');
     $res='';
@@ -693,19 +787,6 @@ class BaseThemeClass {
       );
     }
     return preg_replace( '/\s*[\r\n]+\s*[\r\n]/',"\n", $html_str ); // Remove blank lines
-  }
-
-  function define_acf_elements( $defn ) {
-    if(! function_exists("register_field_group") ) {
-      return  $this->show_error( 'ACF plugin not installed!' );
-    }
-    register_field_group( $defn );
-    return $this;
-  }
-
-  function hide_acf_admin() {
-    define( 'ACF_LITE', true );
-    return $this;
   }
 }
 
