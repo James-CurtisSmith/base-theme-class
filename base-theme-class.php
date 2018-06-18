@@ -281,6 +281,36 @@ class BaseThemeClass {
     return $this;
   }
 
+  function add_taxonomy( $name, $object_types, $extra = [] ) {
+  // Add a taxonomy to the give classes.. similar to add type - works
+  // out plurals, codes, labels etc from given name
+  // then attaches to the appropriate object types....
+    $plural = isset( $extra['plural'] ) ? $extra['plural'] : $this->pl( $name );
+    $code   = isset( $extra['code']   ) ? $extra['code']   : $this->cr( $name );
+    $lc     = strtolower($name);
+    $new_item  = __("New $lc");
+    $edit_item = __("Edit $lc");
+    $view_item = __("View $lc");
+    $view_items = __('View '.strtolower($plural) );
+    $all_items  = __('All '.strtolower($plural) );
+    register_taxonomy( $code, $object_types, [
+      'query_var'         => true,
+      'show_ui'           => true,
+      'show_admin_column' => true,
+      'rewrite' => array( 'slug' => $code ),
+      'heirarchical' => isset( $extra['hierarchical'] ) ? $extra['hierarchical'] : false,
+      'labels'       => [
+        'name'             => __($plural),
+        'singular_name'    => __($name),
+        'edit_item'        => $edit_item,
+        'update_item'      => $edit_item,
+        'add_new_item'     => $new_item,
+        'menu_name'        => __($plural),
+      ]
+    ] );
+    return $this;
+  }
+
   function munge_fields( $prefix, $fields, $type ) {
     // and add fields to it... note we don't have complex fields here!!!
     $munged = [];
