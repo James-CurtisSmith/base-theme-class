@@ -1,4 +1,5 @@
-/*
+/* NOTE NEED TO REWRITE DOCUMENTATION THIS IS THE AJAX DOCS NOT THE HTML
+   DRIVEN DOCS... SO THE DOCUMENTATION IS WRONG......
  +----------------------------------------------------------------------
  | Copyright (c) 2016 Genome Research Ltd.
  | This file is part of the Pagesmith web framework
