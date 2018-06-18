@@ -220,17 +220,22 @@ class BaseThemeClass {
 //----------------------------------------------------------------------
 
   function hr( $string ) {
+  // Make human readable version of variable name
     return ucfirst( preg_replace( '/_/', ' ', $string ) );
   }
   function cr( $string ) {
+  // Convert a human readable name into a valid variable name...
     return strtolower( preg_replace( '/\s+/', '_', $string ) );
   }
   function pl( $string ) {
+  // Pluralize and english string...
+  // ends in "y" replace with "ies" ; o/w add "s"
     if( preg_match( '/y$/', $string ) ) {
       return preg_replace( '/y$/', 'ies', $string );
     }
     return $string.'s';
   }
+
   function create_custom_types() {
 // Name, icon='', plural='', code=''
     if( isset( $this->defn[ 'TYPES' ] ) ) {
@@ -265,9 +270,12 @@ class BaseThemeClass {
       'location' => [[$location]],
       'options' => [ 'position' => 'normal', 'layout' => 'no_box', 'hide_on_screen' => [ 0 => 'the_content' ] ],
       'menu_order' => 0,
-      'label_placement' => 'left'
+      'label_placement' => isset( $extra['labels'] ) ? $extra['labels'] : 'left'
     ];
-    $defn['fields'] = $this->munge_fields( $fields );
+    // Allow a prefix for type so we don't have issues of field name clash
+    // across multiple types....
+    $prefix = isset( $extra['prefix'] ) ? $extra['prefix'].'_' : '';
+    $defn['fields'] = $this->munge_fields( $prefix, $fields, $type );
     // Finally register the acf group to generate the admin interface!
     register_field_group( $defn );
     return $this;
