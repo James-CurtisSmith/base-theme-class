@@ -850,7 +850,7 @@ class BaseThemeClass {
     return $this;
   }
 
-  function get_entries( $type ) {
+  function get_entries( $type, $extra = array() ) {
     $get_posts = new WP_Query;
     $entries = $get_posts->query( array_merge( ['posts_per_page'=>-1,'post_type'=>$type], $extra ) );
 
