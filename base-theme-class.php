@@ -281,19 +281,19 @@ class BaseThemeClass {
     return $this;
   }
 
-  function munge_fields( $fields ) {
+  function munge_fields( $prefix, $fields, $type ) {
     // and add fields to it... note we don't have complex fields here!!!
     $munged = [];
     foreach( $fields as $field => $def ) {
       $code = $this->cr( $field );
       $me = array_merge(
-        ['key'=>'field_'.$code, 'label' => $field, 'name' => $code ],
+        ['key'=>'field_'.$prefix.$code, 'label' => $field, 'name' => $code, 'layout' => 'row' ],
         $def);
       if( isset( $def['sub_fields'] ) ){
-        $me['sub_fields'] = $this->munge_fields( $def['sub_fields'] );
+        $me['sub_fields'] = $this->munge_fields( $prefix.$code.'_', $def['sub_fields'], $type );
       }
       if( isset( $def['layouts'] ) ){
-        $me['layouts'] = $this->munge_fields( $def['layouts'] );
+        $me['layouts'] = $this->munge_fields( $prefix.$code.'_', $def['layouts'], $type );
       }
       $munged[]=$me;
     }
