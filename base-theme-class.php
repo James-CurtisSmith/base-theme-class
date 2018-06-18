@@ -366,10 +366,42 @@ class BaseThemeClass {
 // Set up custom paraemters (in customizer) from config hash (PARAMETERS)
 //----------------------------------------------------------------------
 
+//
+// This functionality allows us to add site wide "variables"
+//
+//  e.g contact email, default email domain, facebook group etc....
+//
+// Retrieved with:
+//   * get_theme_mod('variable_name')
+// or in templates
+//   * [[raw:~:variable_name]]
+//
+
   function register_custom_parameters() {
     add_action( 'customize_register',         array( $this, 'create_custom_theme_params' ) );
     return $this;
   }
+
+// Configuration is an associate array of associate arrays...
+//
+// [ 'key_name' => [
+//   'type'        => '', ## text|checkbox|radio|select|textarea|dropdown-pages|email|url|number|hidden|date.
+//   'section'     => '', ## themes|title_tagline|colors|header_image?|background_image?|static_front_page|...
+//   'default'     => '', ## default value!
+//   'description' => '', ## "Help text"...
+// ] ]
+// These mainly define the control so see:
+//   https://codex.wordpress.org/Class_Reference/WP_Customize_Manager/add_control
+// for documentation...
+
+// <<TO DO>> OTHER OPTIONS - array_merge "extra"
+
+// If you want to do other more complex mods can always "extend in theme class"
+//
+// function create_custom_theme_paras( $wp_customize );
+//   parent::create_custom_theme_params( $wp_customize );
+//   // Add my custom code here....
+// }
 
   function create_custom_theme_params( $wp_customize ) {
     $params = [ 'email_domain' => [
@@ -418,7 +450,7 @@ class BaseThemeClass {
   }
 
   // Remove the comments and new post menu entries
-  //   and change the default "New" link to "page"...
+  //   and change the default "New" link to "page" of if type is passed type..
   function change_default_new_link( $wp_admin_bar, $type = '', $title = '' ) {
     if( $type === '' ) {
       $type = array_key_exists( 'DEFAULT_TYPE', $this->defn )
@@ -440,9 +472,11 @@ class BaseThemeClass {
     $wp_admin_bar->add_node( $new_content_node);
     $wp_admin_bar->remove_menu('comments');
     $wp_admin_bar->remove_node('new-post');
-    $wp_admin_bar->remove_menu('wp-logo');   // Not to do with psts
+    $wp_admin_bar->remove_menu('wp-logo');   // Not to do with posts - but good to get rid of in admin interface!
   }
 
+
+  // Remove posts sidebar entries...
   function remove_posts_sidebar() {
     global $menu;
     $remove_menu_items = [ 'edit-comments.php', 'edit.php' ];
@@ -453,6 +487,8 @@ class BaseThemeClass {
       }
     }
   }
+
+  // Remove columns from post/page listings...
   function remove_post_columns($columns) {
     unset($columns['comments']);
     return $columns;
@@ -466,6 +502,13 @@ class BaseThemeClass {
 //----------------------------------------------------------------------
 // Add email link short code functionality to obfuscate emails...
 //----------------------------------------------------------------------
+
+// We can add additional short codes in theme by extending this method
+//
+// public function register_short_codes() {
+//   add_shortcode( 'my_short_code', array( $this, 'show_my_short_code' ) );
+//   return parent::register_short_codes();
+// }
 
   public function register_short_codes() {
     add_shortcode( 'email_link', array( $this, 'email_link' ) );
@@ -519,7 +562,7 @@ class BaseThemeClass {
         if( is_array( $t_data ) ) {
           return implode( '', array_map(function($row) use ($extra) {
             return $this->expand_template( $this->template_name( $extra, $row ), $row );
-          } ));
+          }, $t_data ));
         }
         return '';
       },
@@ -538,6 +581,8 @@ class BaseThemeClass {
       'strip'     => function( $s ) { return preg_replace( '/\s*\b(height|width)=["\']\d+["\']/', '', do_shortcode( $s ) ); },
       'rand_html' => function( $s ) { return $this->random_html_entities( $s ); },
       'html'      => 'HTMLentities',
+      'json'      => function( $s ) { return HTMLentities( json_encode( $s ) ); },
+      'size'      => function( $s ) { return sizeof( $s ); },
       'email'     => function( $s ) { // embeds an email link into the page!
         $s = strpos( $s, '@' ) !== false ? $s : $s.'@'.get_theme_mod('email_domain');
         return sprintf( '<a href="mailto:%s">%s</a>', $this->random_url_encode( $s ),
@@ -545,6 +590,8 @@ class BaseThemeClass {
       },
       'wp'        => function( $s ) { // Used to call one of the standard wordpress template blocks
          switch( $s ) {
+           case 'path' :
+             return $this->template_directory_uri;
            case 'body_class' :
              return join( ' ', get_body_class() );
            case 'menu-' === substr( $s, 0, 5) :
@@ -677,7 +724,7 @@ class BaseThemeClass {
     return '';
   }
 
-  private function expand_template( $template_code, $data) {
+  protected function expand_template( $template_code, $data) {
     if( ! array_key_exists( $template_code, $this->templates ) ) {
       return $this->show_error( "Template '$template_code' is missing" );
     }
@@ -785,7 +832,7 @@ class BaseThemeClass {
 
   function output_page( $page_type ) {
     get_header();
-    $extra = ['url'=>get_permalink(),'title'=>the_title('','',false)];
+    $extra = ['ID'=>get_the_ID(), 'url'=>get_permalink(),'title'=>the_title('','',false)];
     if( is_array( get_fields() ) ) {
       $this->output( $page_type, array_merge(get_fields(),$extra) );
     } else {
@@ -804,7 +851,9 @@ class BaseThemeClass {
   }
 
   function get_entries( $type ) {
-    $entries = get_posts( ['numberposts'=>-1,'post_type'=>$type] );
+    $get_posts = new WP_Query;
+    $entries = $get_posts->query( array_merge( ['posts_per_page'=>-1,'post_type'=>$type], $extra ) );
+
     $return = [];
     foreach( $entries as $post ) {
       $meta = get_fields( $post->ID );
@@ -812,6 +861,11 @@ class BaseThemeClass {
     }
     return $return;
   }
+
+//----------------------------------------------------------------------
+// Replace characters in string with encoded version of character -
+// either replace with HTML entity code (hex or dec) or URL encoding...
+//----------------------------------------------------------------------
 
   function random_html_entities( $string ) {
     $alwaysEncode = array('.', ':', '@');
@@ -845,7 +899,7 @@ class BaseThemeClass {
       // Trim empty tags -- a, span, p, div, h[1-6], ...
       list($munged,$html_str) = array(
         $html_str,
-        preg_replace('/<(a|span|p|div|h\d)[^>]*>\s*<\/\1>/','',$html_str)
+        preg_replace('/<(li|ol|ul|a|span|p|div|h\d)[^>]*>\s*<\/\1>/','',$html_str)
       );
     }
     return preg_replace( '/\s*[\r\n]+\s*[\r\n]/',"\n", $html_str ); // Remove blank lines
