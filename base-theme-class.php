@@ -109,13 +109,21 @@ class BaseThemeClass {
     // Push styles into header...
     if( isset( $this->defn[ 'STYLES' ] ) ) {
       foreach( $this->defn[ 'STYLES' ] as $key => $name ) {
-        wp_enqueue_script( $key, $this->template_directory_uri.$name,array(),null,false);
+        if( preg_match( '/^(https?:\/)?\//', $name ) ){
+          wp_enqueue_script( $key, $name,array(),null,false);
+        } else {
+          wp_enqueue_script( $key, $this->template_directory_uri.'/'.$name,array(),null,false);
+        }
       }
     }
     // Push scripts into footer...
     if( isset( $this->defn[ 'SCRIPTS' ] ) ) {
       foreach( $this->defn[ 'SCRIPTS' ] as $key => $name ) {
-        wp_enqueue_script( $key, $this->template_directory_uri.$name,array(),null,true);
+        if( preg_match( '/^(https?:\/)?\//', $name ) ){
+          wp_enqueue_script( $key, $name,array(),null,true);
+        } else {
+          wp_enqueue_script( $key, $this->template_directory_uri.'/'.$name,array(),null,true);
+        }
       }
     }
   }
